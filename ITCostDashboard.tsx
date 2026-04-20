@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -162,10 +162,8 @@ const domains: Array<Domain | "ALL"> = ["ALL", "RET", "CORP", "PAYMENTS"];
 const colors = {
   blended: "#2563eb",
   real: "#10b981",
-  positive: "#16a34a",
   negative: "#dc2626",
   neutral: "#2563eb",
-  muted: "#64748b",
 };
 
 const cardClass =
