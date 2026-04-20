@@ -18,37 +18,33 @@ import {
   ZAxis,
 } from "recharts";
 
-type CapName = "RET" | "CORE" | "PAYMENTS" | "DATA";
-type Domain = "Retail" | "Corporate" | "Payments" | "Data";
+type CapId = "CAP_RETAIL" | "CAP_CORE" | "CAP_PAYMENTS" | "CAP_DIGITAL";
+type Domain = "RETAIL" | "CORE_BANKING" | "PAYMENTS" | "DIGITAL_CHANNELS";
 type Scenario = "blended" | "optimized";
 
-type RoleMix = {
+type CapPool = {
+  id: CapId;
+  name: string;
+  budgetBlended: number;
+};
+
+type ProjectBase = {
+  id: string;
+  name: string;
+  cap: CapId;
+  domain: Domain;
+  mandays: number;
+  blendedRate: number;
+  realRate: number;
   developerMD: number;
   testerMD: number;
   analystMD: number;
   architectMD: number;
 };
 
-type CapPool = {
-  id: string;
-  name: CapName;
-  budgetBlended: number;
-  projects: string[];
-};
-
-type ProjectBase = {
-  id: string;
-  name: string;
-  cap: CapName;
-  domain: Domain;
-  mandays: number;
-  blendedRate: number;
-  realRate: number;
-  roleMix: RoleMix;
-};
-
 type CapEfficiencyRow = {
-  cap: CapName;
+  capId: CapId;
+  capName: string;
   budget: number;
   blendedConsumption: number;
   realCost: number;
@@ -73,130 +69,150 @@ const CURRENCY = new Intl.NumberFormat("en-US", {
 
 const NUMBER = new Intl.NumberFormat("en-US");
 
-const capColors: Record<CapName, string> = {
-  RET: "#2563eb",
-  CORE: "#0ea5e9",
-  PAYMENTS: "#10b981",
-  DATA: "#8b5cf6",
+const capColors: Record<CapId, string> = {
+  CAP_RETAIL: "#2563eb",
+  CAP_CORE: "#0ea5e9",
+  CAP_PAYMENTS: "#10b981",
+  CAP_DIGITAL: "#8b5cf6",
 };
 
 const caps: CapPool[] = [
-  { id: "CAP-RET", name: "RET", budgetBlended: 520_000_000, projects: ["P-001", "P-002", "P-003"] },
-  { id: "CAP-CORE", name: "CORE", budgetBlended: 460_000_000, projects: ["P-004", "P-005", "P-006"] },
-  { id: "CAP-PAY", name: "PAYMENTS", budgetBlended: 610_000_000, projects: ["P-007", "P-008", "P-009"] },
-  { id: "CAP-DATA", name: "DATA", budgetBlended: 380_000_000, projects: ["P-010", "P-011"] },
+  { id: "CAP_RETAIL", name: "RETAIL", budgetBlended: 500_000_000 },
+  { id: "CAP_CORE", name: "CORE_BANKING", budgetBlended: 450_000_000 },
+  { id: "CAP_PAYMENTS", name: "PAYMENTS", budgetBlended: 400_000_000 },
+  { id: "CAP_DIGITAL", name: "DIGITAL_CHANNELS", budgetBlended: 350_000_000 },
 ];
 
 const projectBase: ProjectBase[] = [
   {
-    id: "P-001",
-    name: "Retail Mobile Checkout",
-    cap: "RET",
-    domain: "Retail",
-    mandays: 220,
-    blendedRate: 13100,
-    realRate: 9400,
-    roleMix: { developerMD: 115, testerMD: 58, analystMD: 32, architectMD: 15 },
-  },
-  {
-    id: "P-002",
-    name: "Store Promotions Engine",
-    cap: "RET",
-    domain: "Retail",
-    mandays: 195,
-    blendedRate: 12800,
-    realRate: 9200,
-    roleMix: { developerMD: 98, testerMD: 56, analystMD: 29, architectMD: 12 },
-  },
-  {
-    id: "P-003",
-    name: "Retail Omnichannel Hub",
-    cap: "RET",
-    domain: "Retail",
-    mandays: 260,
-    blendedRate: 13200,
-    realRate: 10900,
-    roleMix: { developerMD: 139, testerMD: 49, analystMD: 45, architectMD: 27 },
-  },
-  {
-    id: "P-004",
-    name: "Core ERP Integration",
-    cap: "CORE",
-    domain: "Corporate",
-    mandays: 270,
+    id: "P1",
+    name: "Retail Pricing Engine",
+    cap: "CAP_RETAIL",
+    domain: "RETAIL",
+    mandays: 12000,
     blendedRate: 13000,
-    realRate: 13800,
-    roleMix: { developerMD: 140, testerMD: 40, analystMD: 52, architectMD: 38 },
+    realRate: 10000,
+    developerMD: 6000,
+    testerMD: 4000,
+    analystMD: 1500,
+    architectMD: 500,
   },
   {
-    id: "P-005",
-    name: "Finance Workflow Lite",
-    cap: "CORE",
-    domain: "Corporate",
-    mandays: 185,
-    blendedRate: 12700,
+    id: "P2",
+    name: "Customer Segmentation",
+    cap: "CAP_RETAIL",
+    domain: "RETAIL",
+    mandays: 9000,
+    blendedRate: 13000,
     realRate: 9800,
-    roleMix: { developerMD: 90, testerMD: 45, analystMD: 35, architectMD: 15 },
+    developerMD: 4500,
+    testerMD: 3000,
+    analystMD: 1200,
+    architectMD: 300,
   },
   {
-    id: "P-006",
-    name: "Workplace Identity",
-    cap: "CORE",
-    domain: "Corporate",
-    mandays: 210,
-    blendedRate: 12900,
-    realRate: 11200,
-    roleMix: { developerMD: 104, testerMD: 39, analystMD: 34, architectMD: 33 },
-  },
-  {
-    id: "P-007",
-    name: "Payments API Mesh",
-    cap: "PAYMENTS",
-    domain: "Payments",
-    mandays: 300,
-    blendedRate: 13400,
-    realRate: 14200,
-    roleMix: { developerMD: 150, testerMD: 46, analystMD: 44, architectMD: 60 },
-  },
-  {
-    id: "P-008",
-    name: "Fraud Detection Lab",
-    cap: "PAYMENTS",
-    domain: "Payments",
-    mandays: 245,
-    blendedRate: 13200,
-    realRate: 10100,
-    roleMix: { developerMD: 126, testerMD: 64, analystMD: 31, architectMD: 24 },
-  },
-  {
-    id: "P-009",
-    name: "Instant Settlements",
-    cap: "PAYMENTS",
-    domain: "Payments",
-    mandays: 280,
-    blendedRate: 13300,
-    realRate: 11800,
-    roleMix: { developerMD: 142, testerMD: 45, analystMD: 39, architectMD: 54 },
-  },
-  {
-    id: "P-010",
-    name: "Data Governance Wave 2",
-    cap: "DATA",
-    domain: "Data",
-    mandays: 225,
+    id: "P10",
+    name: "Retail Analytics Platform",
+    cap: "CAP_RETAIL",
+    domain: "RETAIL",
+    mandays: 10000,
     blendedRate: 13000,
-    realRate: 10400,
-    roleMix: { developerMD: 114, testerMD: 50, analystMD: 40, architectMD: 21 },
+    realRate: 9500,
+    developerMD: 5500,
+    testerMD: 2500,
+    analystMD: 1500,
+    architectMD: 500,
   },
   {
-    id: "P-011",
-    name: "Lakehouse Performance",
-    cap: "DATA",
-    domain: "Data",
-    mandays: 250,
-    blendedRate: 13100,
-    realRate: 13600,
-    roleMix: { developerMD: 120, testerMD: 35, analystMD: 36, architectMD: 59 },
+    id: "P3",
+    name: "Core Ledger Modernization",
+    cap: "CAP_CORE",
+    domain: "CORE_BANKING",
+    mandays: 15000,
+    blendedRate: 13000,
+    realRate: 15000,
+    developerMD: 7000,
+    testerMD: 2000,
+    analystMD: 1000,
+    architectMD: 5000,
+  },
+  {
+    id: "P4",
+    name: "Regulatory Reporting Engine",
+    cap: "CAP_CORE",
+    domain: "CORE_BANKING",
+    mandays: 11000,
+    blendedRate: 13000,
+    realRate: 14500,
+    developerMD: 4000,
+    testerMD: 1500,
+    analystMD: 1500,
+    architectMD: 4000,
+  },
+  {
+    id: "P9",
+    name: "AML Compliance Upgrade",
+    cap: "CAP_CORE",
+    domain: "CORE_BANKING",
+    mandays: 16000,
+    blendedRate: 13000,
+    realRate: 15500,
+    developerMD: 5000,
+    testerMD: 2000,
+    analystMD: 4000,
+    architectMD: 5000,
+  },
+  {
+    id: "P5",
+    name: "Instant Payments Platform",
+    cap: "CAP_PAYMENTS",
+    domain: "PAYMENTS",
+    mandays: 13000,
+    blendedRate: 13000,
+    realRate: 12500,
+    developerMD: 6500,
+    testerMD: 3000,
+    analystMD: 1500,
+    architectMD: 2000,
+  },
+  {
+    id: "P6",
+    name: "Fraud Detection System",
+    cap: "CAP_PAYMENTS",
+    domain: "PAYMENTS",
+    mandays: 10000,
+    blendedRate: 13000,
+    realRate: 12000,
+    developerMD: 5000,
+    testerMD: 2500,
+    analystMD: 1500,
+    architectMD: 1000,
+  },
+  {
+    id: "P7",
+    name: "Mobile Banking App",
+    cap: "CAP_DIGITAL",
+    domain: "DIGITAL_CHANNELS",
+    mandays: 14000,
+    blendedRate: 13000,
+    realRate: 14000,
+    developerMD: 8000,
+    testerMD: 3000,
+    analystMD: 1500,
+    architectMD: 1500,
+  },
+  {
+    id: "P8",
+    name: "Web Self-Service Portal",
+    cap: "CAP_DIGITAL",
+    domain: "DIGITAL_CHANNELS",
+    mandays: 9500,
+    blendedRate: 13000,
+    realRate: 11000,
+    developerMD: 5000,
+    testerMD: 2500,
+    analystMD: 1200,
+    architectMD: 800,
   },
 ];
 
@@ -208,13 +224,13 @@ const explainClass =
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 export default function ITCostDashboard() {
-  const [selectedCap, setSelectedCap] = useState<CapName | "ALL">("ALL");
-  const [selectedProjectId, setSelectedProjectId] = useState<string>("P-001");
+  const [selectedCap, setSelectedCap] = useState<CapId | "ALL">("ALL");
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("P1");
   const [scenario, setScenario] = useState<Scenario>("blended");
   const [mixShift, setMixShift] = useState<number>(0);
 
   const filteredCaps = useMemo(
-    () => (selectedCap === "ALL" ? caps : caps.filter((cap) => cap.name === selectedCap)),
+    () => (selectedCap === "ALL" ? caps : caps.filter((cap) => cap.id === selectedCap)),
     [selectedCap]
   );
 
@@ -247,7 +263,7 @@ export default function ITCostDashboard() {
 
   const capEfficiencyRows = useMemo<CapEfficiencyRow[]>(() => {
     return filteredCaps.map((cap) => {
-      const capProjects = projects.filter((project) => project.cap === cap.name);
+      const capProjects = projects.filter((project) => project.cap === cap.id);
       const totalMD = capProjects.reduce((sum, project) => sum + project.mandays, 0);
       const blendedConsumption = capProjects.reduce((sum, project) => sum + project.blendedCost, 0);
       const realCost = capProjects.reduce((sum, project) => sum + project.realCost, 0);
@@ -260,7 +276,8 @@ export default function ITCostDashboard() {
         blendedMDCapacity === 0 ? 0 : ((realMDCapacity - blendedMDCapacity) / blendedMDCapacity) * 100;
 
       return {
-        cap: cap.name,
+        capId: cap.id,
+        capName: cap.name,
         budget: cap.budgetBlended,
         blendedConsumption,
         realCost,
@@ -294,7 +311,8 @@ export default function ITCostDashboard() {
   }, [capEfficiencyRows]);
 
   const capOverviewData = capEfficiencyRows.map((row) => ({
-    cap: row.cap,
+    capId: row.capId,
+    cap: row.capName,
     budget: row.budget,
     realCost: row.realCost,
     purchasingPower: Math.round(row.realMDCapacity),
@@ -320,16 +338,16 @@ export default function ITCostDashboard() {
 
   const rolePieData = selectedProject
     ? [
-        { name: "Developer", value: selectedProject.roleMix.developerMD, color: "#2563eb" },
-        { name: "Tester", value: selectedProject.roleMix.testerMD, color: "#10b981" },
-        { name: "Analyst", value: selectedProject.roleMix.analystMD, color: "#0ea5e9" },
-        { name: "Architect", value: selectedProject.roleMix.architectMD, color: "#dc2626" },
+        { name: "Developer", value: selectedProject.developerMD, color: "#2563eb" },
+        { name: "Tester", value: selectedProject.testerMD, color: "#10b981" },
+        { name: "Analyst", value: selectedProject.analystMD, color: "#0ea5e9" },
+        { name: "Architect", value: selectedProject.architectMD, color: "#dc2626" },
       ]
     : [];
 
   const simulation = useMemo<SimulationSummary>(() => {
     const perCapSimulation = filteredCaps.map((cap) => {
-      const capProjects = projects.filter((project) => project.cap === cap.name);
+      const capProjects = projects.filter((project) => project.cap === cap.id);
       const sorted = [...capProjects].sort((a, b) => {
         if (scenario === "blended") {
           return a.blendedCost - b.blendedCost;
@@ -395,11 +413,11 @@ export default function ITCostDashboard() {
               <select
                 className="ml-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
                 value={selectedCap}
-                onChange={(event) => setSelectedCap(event.target.value as CapName | "ALL")}
+                onChange={(event) => setSelectedCap(event.target.value as CapId | "ALL")}
               >
                 <option value="ALL">ALL</option>
                 {caps.map((cap) => (
-                  <option key={cap.id} value={cap.name}>
+                  <option key={cap.id} value={cap.id}>
                     {cap.name}
                   </option>
                 ))}
@@ -492,7 +510,7 @@ export default function ITCostDashboard() {
                     name="Budget"
                     fill="#2563eb"
                     radius={[8, 8, 0, 0]}
-                    onClick={(point) => setSelectedCap(point.cap as CapName)}
+                    onClick={(point) => setSelectedCap(point.capId as CapId)}
                   />
                   <Bar yAxisId="left" dataKey="realCost" name="Real Cost" fill="#10b981" radius={[8, 8, 0, 0]} />
                   <Line
@@ -595,14 +613,14 @@ export default function ITCostDashboard() {
                   const efficient = row.mdGainPercent > 20;
                   return (
                     <tr
-                      key={row.cap}
+                      key={row.capId}
                       className={`border-b border-slate-100 cursor-pointer ${
                         efficient ? "bg-green-50" : "bg-red-50"
-                      } ${selectedCap === row.cap ? "ring-2 ring-inset ring-blue-400" : ""}`}
-                      onClick={() => setSelectedCap(row.cap)}
+                      } ${selectedCap === row.capId ? "ring-2 ring-inset ring-blue-400" : ""}`}
+                      onClick={() => setSelectedCap(row.capId)}
                     >
-                      <td className="py-2 pr-3 font-semibold" style={{ color: capColors[row.cap] }}>
-                        {row.cap}
+                      <td className="py-2 pr-3 font-semibold" style={{ color: capColors[row.capId] }}>
+                        {row.capName}
                       </td>
                       <td className="py-2 pr-3">{CURRENCY.format(row.budget)}</td>
                       <td className="py-2 pr-3">{CURRENCY.format(row.blendedConsumption)}</td>
@@ -697,10 +715,10 @@ export default function ITCostDashboard() {
                 <Legend />
                 {filteredCaps.map((cap) => (
                   <Scatter
-                    key={cap.name}
+                    key={cap.id}
                     name={cap.name}
-                    data={scatterData.filter((point) => point.cap === cap.name)}
-                    fill={capColors[cap.name]}
+                    data={scatterData.filter((point) => point.cap === cap.id)}
+                    fill={capColors[cap.id]}
                   />
                 ))}
               </ScatterChart>
