@@ -125,7 +125,7 @@ const projectBase: ProjectBase[] = [
     domain: "Corporate",
     mandays: 270,
     blendedRate: 13000,
-    realRate: 11600,
+    realRate: 13800,
     roleMix: { developerMD: 140, testerMD: 40, analystMD: 52, architectMD: 38 },
   },
   {
@@ -155,7 +155,7 @@ const projectBase: ProjectBase[] = [
     domain: "Payments",
     mandays: 300,
     blendedRate: 13400,
-    realRate: 12100,
+    realRate: 14200,
     roleMix: { developerMD: 150, testerMD: 46, analystMD: 44, architectMD: 60 },
   },
   {
@@ -195,7 +195,7 @@ const projectBase: ProjectBase[] = [
     domain: "Data",
     mandays: 250,
     blendedRate: 13100,
-    realRate: 12300,
+    realRate: 13600,
     roleMix: { developerMD: 120, testerMD: 35, analystMD: 36, architectMD: 59 },
   },
 ];
