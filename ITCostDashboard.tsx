@@ -47,14 +47,6 @@ type ProjectBase = {
   roleMix: RoleMix;
 };
 
-type Project = ProjectBase & {
-  adjustedRealRate: number;
-  blendedCost: number;
-  realCost: number;
-  varianceAbsolute: number;
-  variancePercent: number;
-};
-
 type CapEfficiencyRow = {
   cap: CapName;
   budget: number;
