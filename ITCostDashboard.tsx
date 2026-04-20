@@ -1,22 +1,26 @@
 import { useMemo, useState } from "react";
 import {
-  BarChart,
   Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ComposedChart,
+  Legend,
+  Line,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Scatter,
+  ScatterChart,
+  Tooltip,
   XAxis,
   YAxis,
-  Tooltip,
-  CartesianGrid,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  ScatterChart,
-  Scatter,
-  Legend,
+  ZAxis,
 } from "recharts";
 
-type Domain = "RET" | "CORP" | "PAYMENTS";
-type ViewMode = "blended" | "real";
+type CapName = "RET" | "CORE" | "PAYMENTS" | "DATA";
+type Domain = "Retail" | "Corporate" | "Payments" | "Data";
+type Scenario = "blended" | "optimized";
 
 type RoleMix = {
   developerMD: number;
@@ -25,9 +29,17 @@ type RoleMix = {
   architectMD: number;
 };
 
+type CapPool = {
+  id: string;
+  name: CapName;
+  budgetBlended: number;
+  projects: string[];
+};
+
 type ProjectBase = {
   id: string;
   name: string;
+  cap: CapName;
   domain: Domain;
   mandays: number;
   blendedRate: number;
@@ -36,10 +48,29 @@ type ProjectBase = {
 };
 
 type Project = ProjectBase & {
+  adjustedRealRate: number;
   blendedCost: number;
   realCost: number;
   varianceAbsolute: number;
   variancePercent: number;
+};
+
+type CapEfficiencyRow = {
+  cap: CapName;
+  budget: number;
+  blendedConsumption: number;
+  realCost: number;
+  distortionIndex: number;
+  realMDCapacity: number;
+  mdGainPercent: number;
+  blendedAvgRate: number;
+  realAvgRate: number;
+};
+
+type SimulationSummary = {
+  projectsFit: number;
+  totalMD: number;
+  totalRealCost: number;
 };
 
 const CURRENCY = new Intl.NumberFormat("en-US", {
@@ -50,360 +81,587 @@ const CURRENCY = new Intl.NumberFormat("en-US", {
 
 const NUMBER = new Intl.NumberFormat("en-US");
 
-const dummyProjects: ProjectBase[] = [
+const capColors: Record<CapName, string> = {
+  RET: "#2563eb",
+  CORE: "#0ea5e9",
+  PAYMENTS: "#10b981",
+  DATA: "#8b5cf6",
+};
+
+const caps: CapPool[] = [
+  { id: "CAP-RET", name: "RET", budgetBlended: 520_000_000, projects: ["P-001", "P-002", "P-003"] },
+  { id: "CAP-CORE", name: "CORE", budgetBlended: 460_000_000, projects: ["P-004", "P-005", "P-006"] },
+  { id: "CAP-PAY", name: "PAYMENTS", budgetBlended: 610_000_000, projects: ["P-007", "P-008", "P-009"] },
+  { id: "CAP-DATA", name: "DATA", budgetBlended: 380_000_000, projects: ["P-010", "P-011"] },
+];
+
+const projectBase: ProjectBase[] = [
   {
     id: "P-001",
-    name: "Retail Revamp",
-    domain: "RET",
-    mandays: 240,
-    blendedRate: 13000,
-    realRate: 9800,
-    roleMix: { developerMD: 140, testerMD: 45, analystMD: 35, architectMD: 20 },
+    name: "Retail Mobile Checkout",
+    cap: "RET",
+    domain: "Retail",
+    mandays: 220,
+    blendedRate: 13100,
+    realRate: 9400,
+    roleMix: { developerMD: 115, testerMD: 58, analystMD: 32, architectMD: 15 },
   },
   {
     id: "P-002",
-    name: "POS Sync",
-    domain: "RET",
-    mandays: 175,
+    name: "Store Promotions Engine",
+    cap: "RET",
+    domain: "Retail",
+    mandays: 195,
     blendedRate: 12800,
-    realRate: 9400,
-    roleMix: { developerMD: 105, testerMD: 32, analystMD: 23, architectMD: 15 },
+    realRate: 9200,
+    roleMix: { developerMD: 98, testerMD: 56, analystMD: 29, architectMD: 12 },
   },
   {
     id: "P-003",
-    name: "Loyalty Engine",
-    domain: "RET",
-    mandays: 210,
+    name: "Retail Omnichannel Hub",
+    cap: "RET",
+    domain: "Retail",
+    mandays: 260,
     blendedRate: 13200,
-    realRate: 10300,
-    roleMix: { developerMD: 123, testerMD: 40, analystMD: 30, architectMD: 17 },
+    realRate: 10900,
+    roleMix: { developerMD: 139, testerMD: 49, analystMD: 45, architectMD: 27 },
   },
   {
     id: "P-004",
-    name: "Corporate BI Hub",
-    domain: "CORP",
-    mandays: 280,
-    blendedRate: 12900,
-    realRate: 11100,
-    roleMix: { developerMD: 145, testerMD: 52, analystMD: 58, architectMD: 25 },
+    name: "Core ERP Integration",
+    cap: "CORE",
+    domain: "Corporate",
+    mandays: 270,
+    blendedRate: 13000,
+    realRate: 11600,
+    roleMix: { developerMD: 140, testerMD: 40, analystMD: 52, architectMD: 38 },
   },
   {
     id: "P-005",
-    name: "HR Workflow",
-    domain: "CORP",
-    mandays: 165,
+    name: "Finance Workflow Lite",
+    cap: "CORE",
+    domain: "Corporate",
+    mandays: 185,
     blendedRate: 12700,
-    realRate: 11600,
-    roleMix: { developerMD: 78, testerMD: 33, analystMD: 39, architectMD: 15 },
+    realRate: 9800,
+    roleMix: { developerMD: 90, testerMD: 45, analystMD: 35, architectMD: 15 },
   },
   {
     id: "P-006",
-    name: "Finance Controls",
-    domain: "CORP",
-    mandays: 230,
-    blendedRate: 13100,
-    realRate: 10800,
-    roleMix: { developerMD: 122, testerMD: 41, analystMD: 44, architectMD: 23 },
+    name: "Workplace Identity",
+    cap: "CORE",
+    domain: "Corporate",
+    mandays: 210,
+    blendedRate: 12900,
+    realRate: 11200,
+    roleMix: { developerMD: 104, testerMD: 39, analystMD: 34, architectMD: 33 },
   },
   {
     id: "P-007",
-    name: "Payments Gateway",
-    domain: "PAYMENTS",
-    mandays: 260,
+    name: "Payments API Mesh",
+    cap: "PAYMENTS",
+    domain: "Payments",
+    mandays: 300,
     blendedRate: 13400,
-    realRate: 10100,
-    roleMix: { developerMD: 150, testerMD: 54, analystMD: 34, architectMD: 22 },
+    realRate: 12100,
+    roleMix: { developerMD: 150, testerMD: 46, analystMD: 44, architectMD: 60 },
   },
   {
     id: "P-008",
-    name: "Fraud Shield",
-    domain: "PAYMENTS",
-    mandays: 225,
-    blendedRate: 13300,
-    realRate: 9700,
-    roleMix: { developerMD: 130, testerMD: 45, analystMD: 30, architectMD: 20 },
+    name: "Fraud Detection Lab",
+    cap: "PAYMENTS",
+    domain: "Payments",
+    mandays: 245,
+    blendedRate: 13200,
+    realRate: 10100,
+    roleMix: { developerMD: 126, testerMD: 64, analystMD: 31, architectMD: 24 },
   },
   {
     id: "P-009",
-    name: "SEPA Modernization",
-    domain: "PAYMENTS",
-    mandays: 195,
-    blendedRate: 13000,
-    realRate: 10900,
-    roleMix: { developerMD: 107, testerMD: 36, analystMD: 34, architectMD: 18 },
+    name: "Instant Settlements",
+    cap: "PAYMENTS",
+    domain: "Payments",
+    mandays: 280,
+    blendedRate: 13300,
+    realRate: 11800,
+    roleMix: { developerMD: 142, testerMD: 45, analystMD: 39, architectMD: 54 },
   },
   {
     id: "P-010",
-    name: "Merchant API",
-    domain: "PAYMENTS",
-    mandays: 185,
-    blendedRate: 12600,
+    name: "Data Governance Wave 2",
+    cap: "DATA",
+    domain: "Data",
+    mandays: 225,
+    blendedRate: 13000,
+    realRate: 10400,
+    roleMix: { developerMD: 114, testerMD: 50, analystMD: 40, architectMD: 21 },
+  },
+  {
+    id: "P-011",
+    name: "Lakehouse Performance",
+    cap: "DATA",
+    domain: "Data",
+    mandays: 250,
+    blendedRate: 13100,
     realRate: 12300,
-    roleMix: { developerMD: 99, testerMD: 34, analystMD: 36, architectMD: 16 },
+    roleMix: { developerMD: 120, testerMD: 35, analystMD: 36, architectMD: 59 },
   },
 ];
 
-const computeProject = (p: ProjectBase): Project => {
-  const blendedCost = p.mandays * p.blendedRate;
-  const realCost = p.mandays * p.realRate;
-  const varianceAbsolute = blendedCost - realCost;
-  const variancePercent = realCost === 0 ? 0 : (varianceAbsolute / realCost) * 100;
-  return {
-    ...p,
-    blendedCost,
-    realCost,
-    varianceAbsolute,
-    variancePercent,
-  };
-};
+const cardClass = "rounded-2xl bg-white p-4 md:p-5 shadow-sm ring-1 ring-slate-200";
+const sectionTitleClass = "text-base font-semibold text-slate-800";
+const explainClass =
+  "inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-xs text-slate-600 cursor-help";
 
-const domains: Array<Domain | "ALL"> = ["ALL", "RET", "CORP", "PAYMENTS"];
-
-const colors = {
-  blended: "#2563eb",
-  real: "#10b981",
-  negative: "#dc2626",
-  neutral: "#2563eb",
-};
-
-const cardClass =
-  "rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 p-4 md:p-5 transition-all";
-
-const sectionTitleClass = "text-sm font-semibold text-slate-700 tracking-wide";
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 export default function ITCostDashboard() {
-  const [selectedDomain, setSelectedDomain] = useState<Domain | "ALL">("ALL");
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [selectedRoleProjectId, setSelectedRoleProjectId] = useState<string>("P-001");
-  const [viewMode, setViewMode] = useState<ViewMode>("blended");
+  const [selectedCap, setSelectedCap] = useState<CapName | "ALL">("ALL");
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("P-001");
+  const [scenario, setScenario] = useState<Scenario>("blended");
+  const [mixShift, setMixShift] = useState<number>(0);
 
-  const projects = useMemo(() => dummyProjects.map(computeProject), []);
+  const filteredCaps = useMemo(
+    () => (selectedCap === "ALL" ? caps : caps.filter((cap) => cap.name === selectedCap)),
+    [selectedCap]
+  );
 
-  const filteredProjects = useMemo(() => {
-    const scoped =
-      selectedDomain === "ALL"
-        ? projects
-        : projects.filter((p) => p.domain === selectedDomain);
-    return scoped;
-  }, [projects, selectedDomain]);
+  const shiftFactor = 1 - mixShift / 100;
 
-  const activeProject = useMemo(() => {
-    if (!selectedProjectId) return null;
-    return filteredProjects.find((p) => p.id === selectedProjectId) ?? null;
-  }, [selectedProjectId, filteredProjects]);
+  const projects = useMemo(() => {
+    return projectBase
+      .filter((project) => selectedCap === "ALL" || project.cap === selectedCap)
+      .map((project) => {
+        const adjustedRealRate = Math.round(project.realRate * shiftFactor);
+        const blendedCost = project.mandays * project.blendedRate;
+        const realCost = project.mandays * adjustedRealRate;
+        const varianceAbsolute = blendedCost - realCost;
+        const variancePercent = realCost === 0 ? 0 : (varianceAbsolute / realCost) * 100;
+        return {
+          ...project,
+          adjustedRealRate,
+          blendedCost,
+          realCost,
+          varianceAbsolute,
+          variancePercent,
+        };
+      });
+  }, [selectedCap, shiftFactor]);
 
-  const roleMixProject = useMemo(() => {
-    return (
-      projects.find((p) => p.id === selectedRoleProjectId) ??
-      filteredProjects[0] ??
-      projects[0]
-    );
-  }, [projects, filteredProjects, selectedRoleProjectId]);
+  const selectedProject =
+    projects.find((project) => project.id === selectedProjectId) ??
+    projects[0] ??
+    null;
 
-  const totals = useMemo(() => {
-    const totalBlended = filteredProjects.reduce((acc, p) => acc + p.blendedCost, 0);
-    const totalReal = filteredProjects.reduce((acc, p) => acc + p.realCost, 0);
-    const varianceAbs = totalBlended - totalReal;
-    const variancePct = totalReal === 0 ? 0 : (varianceAbs / totalReal) * 100;
-    const distortionIndex = totalReal === 0 ? 0 : totalBlended / totalReal;
+  const capEfficiencyRows = useMemo<CapEfficiencyRow[]>(() => {
+    return filteredCaps.map((cap) => {
+      const capProjects = projects.filter((project) => project.cap === cap.name);
+      const totalMD = capProjects.reduce((sum, project) => sum + project.mandays, 0);
+      const blendedConsumption = capProjects.reduce((sum, project) => sum + project.blendedCost, 0);
+      const realCost = capProjects.reduce((sum, project) => sum + project.realCost, 0);
+      const blendedAvgRate = totalMD === 0 ? 0 : blendedConsumption / totalMD;
+      const realAvgRate = totalMD === 0 ? 0 : realCost / totalMD;
+      const distortionIndex = realCost === 0 ? 0 : blendedConsumption / realCost;
+      const realMDCapacity = realAvgRate === 0 ? 0 : cap.budgetBlended / realAvgRate;
+      const blendedMDCapacity = blendedAvgRate === 0 ? 0 : cap.budgetBlended / blendedAvgRate;
+      const mdGainPercent =
+        blendedMDCapacity === 0 ? 0 : ((realMDCapacity - blendedMDCapacity) / blendedMDCapacity) * 100;
+
+      return {
+        cap: cap.name,
+        budget: cap.budgetBlended,
+        blendedConsumption,
+        realCost,
+        distortionIndex,
+        realMDCapacity,
+        mdGainPercent,
+        blendedAvgRate,
+        realAvgRate,
+      };
+    });
+  }, [filteredCaps, projects]);
+
+  const globalKPIs = useMemo(() => {
+    const totalBudget = capEfficiencyRows.reduce((sum, row) => sum + row.budget, 0);
+    const totalBlendedConsumption = capEfficiencyRows.reduce((sum, row) => sum + row.blendedConsumption, 0);
+    const totalRealCost = capEfficiencyRows.reduce((sum, row) => sum + row.realCost, 0);
+    const totalVariance = totalBlendedConsumption - totalRealCost;
+    const avgDistortionIndex =
+      capEfficiencyRows.length === 0
+        ? 0
+        : capEfficiencyRows.reduce((sum, row) => sum + row.distortionIndex, 0) / capEfficiencyRows.length;
+    const totalRealPower = capEfficiencyRows.reduce((sum, row) => sum + row.realMDCapacity, 0);
 
     return {
-      totalBlended,
-      totalReal,
-      varianceAbs,
-      variancePct,
-      distortionIndex,
+      totalBudget,
+      totalRealCost,
+      totalVariance,
+      avgDistortionIndex,
+      totalRealPower,
     };
-  }, [filteredProjects]);
+  }, [capEfficiencyRows]);
 
-  const domainAggregates = useMemo(() => {
-    const map = new Map<Domain, { domain: Domain; mandays: number; blended: number; real: number }>();
-    projects.forEach((p) => {
-      const current = map.get(p.domain) ?? {
-        domain: p.domain,
-        mandays: 0,
-        blended: 0,
-        real: 0,
-      };
-      current.mandays += p.mandays;
-      current.blended += p.blendedCost;
-      current.real += p.realCost;
-      map.set(p.domain, current);
-    });
-    return Array.from(map.values());
-  }, [projects]);
-
-  const rolePieData = useMemo(() => {
-    const mix = roleMixProject.roleMix;
-    return [
-      { name: "Developer", value: mix.developerMD, color: "#2563eb" },
-      { name: "Tester", value: mix.testerMD, color: "#10b981" },
-      { name: "Analyst", value: mix.analystMD, color: "#f59e0b" },
-      { name: "Architect", value: mix.architectMD, color: "#8b5cf6" },
-    ];
-  }, [roleMixProject]);
-
-  const scatterData = filteredProjects.map((p) => ({
-    projectId: p.id,
-    projectName: p.name,
-    x: p.realCost,
-    y: Number(p.variancePercent.toFixed(2)),
+  const capOverviewData = capEfficiencyRows.map((row) => ({
+    cap: row.cap,
+    budget: row.budget,
+    realCost: row.realCost,
+    purchasingPower: Math.round(row.realMDCapacity),
   }));
 
-  const chartModeLabel = viewMode === "blended" ? "Blended-first lens" : "Real-first lens";
+  const projectComparisonData = projects.map((project) => ({
+    id: project.id,
+    name: project.name,
+    blendedCost: project.blendedCost,
+    realCost: project.realCost,
+    varianceAbsolute: project.varianceAbsolute,
+    variancePercent: project.variancePercent,
+  }));
+
+  const scatterData = projects.map((project) => ({
+    id: project.id,
+    cap: project.cap,
+    name: project.name,
+    x: project.realCost,
+    y: Number(project.variancePercent.toFixed(2)),
+    z: project.mandays,
+  }));
+
+  const rolePieData = selectedProject
+    ? [
+        { name: "Developer", value: selectedProject.roleMix.developerMD, color: "#2563eb" },
+        { name: "Tester", value: selectedProject.roleMix.testerMD, color: "#10b981" },
+        { name: "Analyst", value: selectedProject.roleMix.analystMD, color: "#0ea5e9" },
+        { name: "Architect", value: selectedProject.roleMix.architectMD, color: "#dc2626" },
+      ]
+    : [];
+
+  const simulation = useMemo<SimulationSummary>(() => {
+    const perCapSimulation = filteredCaps.map((cap) => {
+      const capProjects = projects.filter((project) => project.cap === cap.name);
+      const sorted = [...capProjects].sort((a, b) => {
+        if (scenario === "blended") {
+          return a.blendedCost - b.blendedCost;
+        }
+        const aEfficiency = a.mandays / a.realCost;
+        const bEfficiency = b.mandays / b.realCost;
+        return bEfficiency - aEfficiency;
+      });
+
+      let budgetUsed = 0;
+      let realCostUsed = 0;
+      let totalMD = 0;
+      let projectsFit = 0;
+
+      sorted.forEach((project) => {
+        const planningCost = scenario === "blended" ? project.blendedCost : project.realCost;
+        if (budgetUsed + planningCost <= cap.budgetBlended) {
+          budgetUsed += planningCost;
+          realCostUsed += project.realCost;
+          totalMD += project.mandays;
+          projectsFit += 1;
+        }
+      });
+
+      return { projectsFit, totalMD, totalRealCost: realCostUsed };
+    });
+
+    return perCapSimulation.reduce(
+      (acc, current) => ({
+        projectsFit: acc.projectsFit + current.projectsFit,
+        totalMD: acc.totalMD + current.totalMD,
+        totalRealCost: acc.totalRealCost + current.totalRealCost,
+      }),
+      { projectsFit: 0, totalMD: 0, totalRealCost: 0 }
+    );
+  }, [filteredCaps, projects, scenario]);
+
+  const totalBlendedCapacity = capEfficiencyRows.reduce(
+    (sum, row) => sum + (row.blendedAvgRate === 0 ? 0 : row.budget / row.blendedAvgRate),
+    0
+  );
+  const totalRealCapacity = capEfficiencyRows.reduce(
+    (sum, row) => sum + (row.realAvgRate === 0 ? 0 : row.budget / row.realAvgRate),
+    0
+  );
+  const additionalMDOutput = totalRealCapacity - totalBlendedCapacity;
+  const mdOutputGainPct = totalBlendedCapacity === 0 ? 0 : (additionalMDOutput / totalBlendedCapacity) * 100;
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-8 text-slate-900">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 md:px-8 md:py-8 text-slate-900">
+      <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
-              IT Cost Distortion Dashboard
-            </h1>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">CAP Cost Efficiency Dashboard</h1>
             <p className="text-slate-600 mt-1">
-              Compare blended pricing versus real role-weighted costs across projects.
+              Blended budgeting vs real-cost delivery power for portfolio planning.
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3 items-center">
+          <div className="flex flex-wrap items-center gap-3">
             <label className="text-sm text-slate-700">
-              Domain:
+              CAP Filter:
               <select
                 className="ml-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                value={selectedDomain}
-                onChange={(e) => {
-                  setSelectedDomain(e.target.value as Domain | "ALL");
-                  setSelectedProjectId(null);
-                }}
+                value={selectedCap}
+                onChange={(event) => setSelectedCap(event.target.value as CapName | "ALL")}
               >
-                {domains.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
+                <option value="ALL">ALL</option>
+                {caps.map((cap) => (
+                  <option key={cap.id} value={cap.name}>
+                    {cap.name}
                   </option>
                 ))}
               </select>
             </label>
-
-            <button
-              type="button"
-              onClick={() => setViewMode((v) => (v === "blended" ? "real" : "blended"))}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-100"
-              title="Switch chart emphasis between blended and real perspective."
-            >
-              <span className="h-2.5 w-2.5 rounded-full bg-slate-500" />
-              {viewMode === "blended" ? "Show Real View" : "Show Blended View"}
-            </button>
           </div>
         </header>
 
         <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
           <div className={cardClass}>
-            <p className={sectionTitleClass}>Total Blended Cost</p>
-            <p className="mt-2 text-xl font-semibold">{CURRENCY.format(totals.totalBlended)}</p>
-          </div>
-          <div className={cardClass}>
-            <p className={sectionTitleClass}>Total Real Cost</p>
-            <p className="mt-2 text-xl font-semibold">{CURRENCY.format(totals.totalReal)}</p>
-          </div>
-          <div className={cardClass}>
-            <p className={sectionTitleClass}>Total Variance</p>
-            <p
-              className={`mt-2 text-xl font-semibold ${
-                totals.varianceAbs >= 0 ? "text-red-600" : "text-blue-600"
-              }`}
-            >
-              {CURRENCY.format(totals.varianceAbs)}
-            </p>
-          </div>
-          <div className={cardClass}>
-            <p className={sectionTitleClass}>Variance (%)</p>
-            <p
-              className={`mt-2 text-xl font-semibold ${
-                totals.variancePct >= 0 ? "text-red-600" : "text-blue-600"
-              }`}
-            >
-              {totals.variancePct.toFixed(1)}%
-            </p>
+            <p className="text-sm font-semibold text-slate-700">Total Budget (Blended)</p>
+            <p className="mt-2 text-xl font-semibold">{CURRENCY.format(globalKPIs.totalBudget)}</p>
           </div>
           <div className={cardClass}>
             <p className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              Cost Distortion Index
+              Total Real Cost
               <span
-                title="Cost Distortion Index = Total Blended Cost / Total Real Cost. Above 1 means blended pricing inflates cost perception."
-                className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-xs text-slate-600 cursor-help"
+                className={explainClass}
+                title="Real cost uses role-weighted rates. It reflects managerial economics, not contractual blended pricing."
               >
                 i
               </span>
             </p>
-            <p className="mt-2 text-xl font-semibold text-slate-900">
-              {totals.distortionIndex.toFixed(2)}x
+            <p className="mt-2 text-xl font-semibold">{CURRENCY.format(globalKPIs.totalRealCost)}</p>
+          </div>
+          <div className={cardClass}>
+            <p className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+              Total Variance
+              <span
+                className={explainClass}
+                title="Blended vs Real Cost variance shows how blended pricing distorts portfolio economics."
+              >
+                i
+              </span>
             </p>
+            <p className={`mt-2 text-xl font-semibold ${globalKPIs.totalVariance >= 0 ? "text-red-600" : "text-green-600"}`}>
+              {CURRENCY.format(globalKPIs.totalVariance)}
+            </p>
+          </div>
+          <div className={cardClass}>
+            <p className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+              Avg Distortion Index
+              <span
+                className={explainClass}
+                title="Cost Distortion Index = blended consumption / real cost. Values above 1 imply inflated budget view."
+              >
+                i
+              </span>
+            </p>
+            <p className="mt-2 text-xl font-semibold text-blue-700">{globalKPIs.avgDistortionIndex.toFixed(2)}x</p>
+          </div>
+          <div className={cardClass}>
+            <p className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+              Total Real MD Power
+              <span
+                className={explainClass}
+                title="Real Purchasing Power = blended budget divided by average real rate. This estimates delivery capacity in MD."
+              >
+                i
+              </span>
+            </p>
+            <p className="mt-2 text-xl font-semibold text-green-700">{NUMBER.format(Math.round(globalKPIs.totalRealPower))} MD</p>
+          </div>
+        </section>
+
+        <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div className={cardClass}>
+            <h2 className={sectionTitleClass}>CAP Overview</h2>
+            <p className="text-xs text-slate-500 mt-1">Bars: Budget and real cost | Line: real MD purchasing power</p>
+            <div className="h-80 mt-3">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={capOverviewData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="cap" />
+                  <YAxis yAxisId="left" tickFormatter={(value) => `${Math.round(value / 1_000_000)}M`} />
+                  <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => `${Math.round(value)}`} />
+                  <Tooltip
+                    formatter={(value: number, name: string) => {
+                      if (name === "Real MD Purchasing Power") {
+                        return [`${NUMBER.format(Math.round(value))} MD`, name];
+                      }
+                      return [CURRENCY.format(value), name];
+                    }}
+                    contentStyle={{ borderRadius: 12, borderColor: "#cbd5e1" }}
+                  />
+                  <Legend />
+                  <Bar
+                    yAxisId="left"
+                    dataKey="budget"
+                    name="Budget"
+                    fill="#2563eb"
+                    radius={[8, 8, 0, 0]}
+                    onClick={(point) => setSelectedCap(point.cap as CapName)}
+                  />
+                  <Bar yAxisId="left" dataKey="realCost" name="Real Cost" fill="#10b981" radius={[8, 8, 0, 0]} />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="purchasingPower"
+                    name="Real MD Purchasing Power"
+                    stroke="#dc2626"
+                    strokeWidth={2}
+                    dot={{ r: 4 }}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className={cardClass}>
+            <h2 className={sectionTitleClass}>Portfolio Simulation</h2>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setScenario("blended")}
+                className={`rounded-lg px-3 py-2 text-sm border ${
+                  scenario === "blended"
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "bg-white text-slate-700 border-slate-300"
+                }`}
+              >
+                Scenario A: Blended Planning
+              </button>
+              <button
+                type="button"
+                onClick={() => setScenario("optimized")}
+                className={`rounded-lg px-3 py-2 text-sm border ${
+                  scenario === "optimized"
+                    ? "bg-green-600 text-white border-green-600"
+                    : "bg-white text-slate-700 border-slate-300"
+                }`}
+              >
+                Scenario B: Real Cost Optimized
+              </button>
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
+                <p className="text-xs text-slate-500">Projects Fit</p>
+                <p className="text-lg font-semibold">{simulation.projectsFit}</p>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
+                <p className="text-xs text-slate-500">MD Delivered</p>
+                <p className="text-lg font-semibold text-blue-700">{NUMBER.format(simulation.totalMD)} MD</p>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
+                <p className="text-xs text-slate-500">Total Real Cost</p>
+                <p className="text-lg font-semibold text-green-700">{CURRENCY.format(simulation.totalRealCost)}</p>
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <div className="flex items-center justify-between text-sm">
+                <p className="font-medium text-slate-700">What-if: Shift to cheaper resource mix (%)</p>
+                <p className="text-slate-600">{mixShift}%</p>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={25}
+                step={1}
+                value={mixShift}
+                onChange={(event) => setMixShift(clamp(Number(event.target.value), 0, 25))}
+                className="mt-2 w-full accent-blue-600"
+              />
+              <div className="mt-3 rounded-xl bg-green-50 p-3 ring-1 ring-green-100">
+                <p className="text-sm text-green-800">
+                  Potential MD output gain: <span className="font-semibold">{NUMBER.format(Math.round(additionalMDOutput))} MD</span>{" "}
+                  ({mdOutputGainPct.toFixed(1)}%) with the same blended budget envelope.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className={cardClass}>
+          <h2 className={sectionTitleClass}>CAP Efficiency Table</h2>
+          <div className="mt-3 overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-slate-600">
+                  <th className="py-2 pr-3">CAP</th>
+                  <th className="py-2 pr-3">Budget</th>
+                  <th className="py-2 pr-3">Blended Consumption</th>
+                  <th className="py-2 pr-3">Real Cost</th>
+                  <th className="py-2 pr-3">Distortion Index</th>
+                  <th className="py-2 pr-3">Real MD Capacity</th>
+                  <th className="py-2 pr-3">Potential MD Gain %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {capEfficiencyRows.map((row) => {
+                  const efficient = row.mdGainPercent > 20;
+                  return (
+                    <tr
+                      key={row.cap}
+                      className={`border-b border-slate-100 cursor-pointer ${
+                        efficient ? "bg-green-50" : "bg-red-50"
+                      } ${selectedCap === row.cap ? "ring-2 ring-inset ring-blue-400" : ""}`}
+                      onClick={() => setSelectedCap(row.cap)}
+                    >
+                      <td className="py-2 pr-3 font-semibold" style={{ color: capColors[row.cap] }}>
+                        {row.cap}
+                      </td>
+                      <td className="py-2 pr-3">{CURRENCY.format(row.budget)}</td>
+                      <td className="py-2 pr-3">{CURRENCY.format(row.blendedConsumption)}</td>
+                      <td className="py-2 pr-3">{CURRENCY.format(row.realCost)}</td>
+                      <td className="py-2 pr-3 font-semibold">{row.distortionIndex.toFixed(2)}x</td>
+                      <td className="py-2 pr-3 text-blue-700 font-semibold">{NUMBER.format(Math.round(row.realMDCapacity))}</td>
+                      <td className={`py-2 pr-3 font-semibold ${efficient ? "text-green-700" : "text-red-700"}`}>
+                        {row.mdGainPercent.toFixed(1)}%
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </section>
 
         <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           <div className={`${cardClass} xl:col-span-2`}>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-base font-semibold">Project Comparison</h2>
-              <span className="text-xs text-slate-500">{chartModeLabel}</span>
-            </div>
-            <div className="h-80">
+            <h2 className={sectionTitleClass}>Project View: Blended vs Real Cost</h2>
+            <div className="h-80 mt-3">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={filteredProjects} margin={{ top: 10, right: 20, left: 0, bottom: 20 }}>
+                <BarChart data={projectComparisonData} margin={{ top: 10, right: 20, left: 0, bottom: 30 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-20} textAnchor="end" height={70} />
-                  <YAxis tickFormatter={(v) => `${Math.round(v / 1_000_000)}M`} />
+                  <XAxis dataKey="name" angle={-20} interval={0} textAnchor="end" height={75} tick={{ fontSize: 11 }} />
+                  <YAxis tickFormatter={(value) => `${Math.round(value / 1_000_000)}M`} />
                   <Tooltip
                     formatter={(value: number) => CURRENCY.format(value)}
                     labelFormatter={(label) => `Project: ${label}`}
                     contentStyle={{ borderRadius: 12, borderColor: "#cbd5e1" }}
                   />
                   <Legend />
-                  <Bar
-                    dataKey="blendedCost"
-                    name="Blended Cost"
-                    fill={viewMode === "blended" ? colors.blended : "#93c5fd"}
-                    radius={[8, 8, 0, 0]}
-                    onClick={(d) => setSelectedProjectId(d.id)}
-                  />
-                  <Bar
-                    dataKey="realCost"
-                    name="Real Cost"
-                    fill={viewMode === "real" ? colors.real : "#86efac"}
-                    radius={[8, 8, 0, 0]}
-                    onClick={(d) => setSelectedProjectId(d.id)}
-                  />
+                  <Bar dataKey="blendedCost" name="Blended Cost" fill="#2563eb" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="realCost" name="Real Cost" fill="#10b981" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            {activeProject ? (
-              <p className="mt-3 text-sm text-slate-700">
-                Selected: <span className="font-medium">{activeProject.name}</span> | Variance:{" "}
-                <span
-                  className={
-                    activeProject.varianceAbsolute >= 0 ? "text-red-600 font-semibold" : "text-blue-600 font-semibold"
-                  }
-                >
-                  {CURRENCY.format(activeProject.varianceAbsolute)} ({activeProject.variancePercent.toFixed(1)}%)
-                </span>
-              </p>
-            ) : (
-              <p className="mt-3 text-sm text-slate-500">Click a project bar or scatter dot to highlight it.</p>
-            )}
           </div>
 
           <div className={cardClass}>
-            <h2 className="text-base font-semibold mb-3">Role Mix Analysis</h2>
-            <label className="text-sm text-slate-700">
-              Project:
+            <h2 className={sectionTitleClass}>Role Mix View</h2>
+            <label className="mt-3 block text-sm text-slate-700">
+              Project
               <select
+                value={selectedProject?.id ?? ""}
+                onChange={(event) => setSelectedProjectId(event.target.value)}
                 className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                value={roleMixProject.id}
-                onChange={(e) => setSelectedRoleProjectId(e.target.value)}
               >
-                {filteredProjects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
                   </option>
                 ))}
               </select>
@@ -411,9 +669,9 @@ export default function ITCostDashboard() {
             <div className="h-64 mt-3">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Tooltip formatter={(v: number) => `${v} MD`} />
+                  <Tooltip formatter={(value: number) => `${NUMBER.format(value)} MD`} />
                   <Legend />
-                  <Pie data={rolePieData} dataKey="value" nameKey="name" innerRadius={50} outerRadius={88}>
+                  <Pie data={rolePieData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={85}>
                     {rolePieData.map((entry) => (
                       <Cell key={entry.name} fill={entry.color} />
                     ))}
@@ -424,131 +682,39 @@ export default function ITCostDashboard() {
           </div>
         </section>
 
-        <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className={cardClass}>
-            <h2 className="text-base font-semibold mb-3">Variance Heatmap Table</h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left border-b border-slate-200 text-slate-600">
-                    <th className="py-2 pr-3">Project</th>
-                    <th className="py-2 pr-3">Domain</th>
-                    <th className="py-2 pr-3">Mandays</th>
-                    <th className="py-2 pr-3">Blended</th>
-                    <th className="py-2 pr-3">Real</th>
-                    <th className="py-2 pr-3">Variance %</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredProjects.map((p) => {
-                    const isOverpriced = p.variancePercent > 0;
-                    const rowBg = isOverpriced ? "bg-red-50" : "bg-blue-50";
-                    const isSelected = selectedProjectId === p.id;
-                    return (
-                      <tr
-                        key={p.id}
-                        className={`border-b border-slate-100 hover:bg-slate-50 cursor-pointer ${rowBg} ${
-                          isSelected ? "ring-2 ring-inset ring-indigo-400" : ""
-                        }`}
-                        onClick={() => setSelectedProjectId(p.id)}
-                      >
-                        <td className="py-2 pr-3 font-medium">{p.name}</td>
-                        <td className="py-2 pr-3">{p.domain}</td>
-                        <td className="py-2 pr-3">{NUMBER.format(p.mandays)}</td>
-                        <td className="py-2 pr-3">{CURRENCY.format(p.blendedCost)}</td>
-                        <td className="py-2 pr-3">{CURRENCY.format(p.realCost)}</td>
-                        <td
-                          className={`py-2 pr-3 font-semibold ${
-                            isOverpriced ? "text-red-700" : "text-blue-700"
-                          }`}
-                        >
-                          {p.variancePercent.toFixed(1)}%
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className={cardClass}>
-            <h2 className="text-base font-semibold mb-3">Domain View (Aggregated)</h2>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={domainAggregates}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="domain" />
-                  <YAxis tickFormatter={(v) => `${Math.round(v / 1_000_000)}M`} />
-                  <Tooltip
-                    formatter={(value: number, name: string) => [
-                      CURRENCY.format(value),
-                      name === "blended" ? "Blended Cost" : name === "real" ? "Real Cost" : "Mandays",
-                    ]}
-                    contentStyle={{ borderRadius: 12, borderColor: "#cbd5e1" }}
-                  />
-                  <Legend />
-                  <Bar dataKey="blended" name="Blended Cost" fill={colors.blended} radius={[8, 8, 0, 0]} />
-                  <Bar dataKey="real" name="Real Cost" fill={colors.real} radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </section>
-
         <section className={cardClass}>
-          <h2 className="text-base font-semibold mb-3">Project Distortion Scatter</h2>
-          <p className="text-xs text-slate-500 mb-2">
-            X = Real Cost, Y = Variance %. Top-right points are expensive and strongly distorted.
-          </p>
-          <div className="h-80">
+          <h2 className={sectionTitleClass}>Enhanced Scatter: Cost Distortion vs Project Size</h2>
+          <p className="mt-1 text-xs text-slate-500">X = Real Cost | Y = Variance % | Bubble size = Mandays | Color = CAP</p>
+          <div className="h-80 mt-3">
             <ResponsiveContainer width="100%" height="100%">
-              <ScatterChart margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
+              <ScatterChart>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis
-                  type="number"
-                  dataKey="x"
-                  name="Real Cost"
-                  tickFormatter={(v) => `${Math.round(v / 1_000_000)}M`}
-                />
+                <XAxis type="number" dataKey="x" name="Real Cost" tickFormatter={(value) => `${Math.round(value / 1_000_000)}M`} />
                 <YAxis type="number" dataKey="y" name="Variance %" unit="%" />
+                <ZAxis type="number" dataKey="z" range={[80, 380]} name="Mandays" />
                 <Tooltip
                   cursor={{ strokeDasharray: "3 3" }}
-                  formatter={(value: number, name) =>
-                    name === "Real Cost" ? CURRENCY.format(value) : `${value.toFixed(2)}%`
-                  }
-                  labelFormatter={(_, payload) =>
-                    payload && payload[0] ? `${payload[0].payload.projectName}` : ""
-                  }
+                  formatter={(value: number, label: string) => {
+                    if (label === "Real Cost") return [CURRENCY.format(value), label];
+                    if (label === "Variance %") return [`${value.toFixed(1)}%`, label];
+                    return [`${NUMBER.format(value)} MD`, label];
+                  }}
+                  labelFormatter={(_, payload) => (payload && payload[0] ? payload[0].payload.name : "")}
                   contentStyle={{ borderRadius: 12, borderColor: "#cbd5e1" }}
                 />
-                <Scatter
-                  name="Projects"
-                  data={scatterData}
-                  fill={colors.neutral}
-                  onClick={(d) => setSelectedProjectId(d.projectId)}
-                  shape={(props: any) => {
-                    const isSelected = selectedProjectId === props.payload.projectId;
-                    return (
-                      <circle
-                        cx={props.cx}
-                        cy={props.cy}
-                        r={isSelected ? 8 : 6}
-                        fill={isSelected ? colors.negative : colors.neutral}
-                        stroke={isSelected ? "#7f1d1d" : "#1e40af"}
-                        strokeWidth={isSelected ? 2 : 1}
-                      />
-                    );
-                  }}
-                />
+                <Legend />
+                {filteredCaps.map((cap) => (
+                  <Scatter
+                    key={cap.name}
+                    name={cap.name}
+                    data={scatterData.filter((point) => point.cap === cap.name)}
+                    fill={capColors[cap.name]}
+                  />
+                ))}
               </ScatterChart>
             </ResponsiveContainer>
           </div>
         </section>
-
-        <footer className="text-xs text-slate-500">
-          Clean management view with dummy data. Values illustrate how blended rates can mask role-based cost reality.
-        </footer>
       </div>
     </div>
   );
